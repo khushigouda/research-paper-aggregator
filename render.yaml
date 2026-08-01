@@ -1,0 +1,15 @@
+services:
+  - type: cron
+    name: ai-paper-aggregator-weekly-digest
+    env: docker
+    dockerfilePath: ./Dockerfile
+    schedule: "0 9 * * 1" # Runs every Monday at 9:00 AM UTC
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: MY_EMAIL
+        sync: false
+      - key: APP_PASSWORD
+        sync: false
