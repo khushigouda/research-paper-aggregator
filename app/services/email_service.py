@@ -21,11 +21,14 @@ load_dotenv(override=True)
 
 def send_email(subject: str, body_text: str, body_html: str = None, recipients: list = None):
     """
-    Sends an email with optional HTML body via Gmail SMTP_SSL.
+    Sends an email using HTTP API (Resend / SendGrid - HTTPS port 443) or Gmail SMTP.
+    HTTP APIs are recommended for Render Free Tier where outbound SMTP ports are blocked.
     """
     load_dotenv(override=True)
     my_email = os.getenv("MY_EMAIL")
     app_password = os.getenv("APP_PASSWORD")
+    resend_api_key = os.getenv("RESEND_API_KEY")
+    sendgrid_api_key = os.getenv("SENDGRID_API_KEY")
 
     if recipients is None:
         if not my_email:
@@ -35,12 +38,66 @@ def send_email(subject: str, body_text: str, body_html: str = None, recipients: 
     recipients = [r for r in recipients if r is not None]
     if not recipients:
         raise ValueError("No valid recipients provided")
-    
-    if not my_email:
-        raise ValueError("MY_EMAIL environment variable is not set in your .env file")
-    if not app_password:
-        raise ValueError("APP_PASSWORD environment variable is not set in your .env file")
-    
+
+    # 1. Try Resend HTTP REST API (HTTPS port 443 - Works on Render Free Tier)
+    if resend_api_key:
+        print("[EmailService] Sending email via Resend HTTP API...")
+        try:
+            import requests
+            resp = requests.post(
+                "https://api.resend.com/emails",
+                headers={
+                    "Authorization": f"Bearer {resend_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "from": os.getenv("FROM_EMAIL", "onboarding@resend.dev"),
+                    "to": recipients,
+                    "subject": subject,
+                    "text": body_text,
+                    "html": body_html or body_text
+                },
+                timeout=15
+            )
+            if resp.status_code in [200, 201, 202]:
+                print("✅ Email dispatched successfully via Resend HTTP API.")
+                return True
+            else:
+                print(f"⚠️ Resend HTTP API error ({resp.status_code}): {resp.text}")
+        except Exception as e:
+            print(f"⚠️ Resend HTTP API failed: {e}")
+
+    # 2. Try SendGrid HTTP REST API (HTTPS port 443)
+    if sendgrid_api_key:
+        print("[EmailService] Sending email via SendGrid HTTP API...")
+        try:
+            import requests
+            resp = requests.post(
+                "https://api.sendgrid.com/v3/mail/send",
+                headers={
+                    "Authorization": f"Bearer {sendgrid_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "personalizations": [{"to": [{"email": r} for r in recipients]}],
+                    "from": {"email": my_email},
+                    "subject": subject,
+                    "content": [{"type": "text/html", "value": body_html or body_text}]
+                },
+                timeout=15
+            )
+            if resp.status_code in [200, 202]:
+                print("✅ Email dispatched successfully via SendGrid HTTP API.")
+                return True
+            else:
+                print(f"⚠️ SendGrid HTTP API error ({resp.status_code}): {resp.text}")
+        except Exception as e:
+            print(f"⚠️ SendGrid HTTP API failed: {e}")
+
+    # 3. Fallback to standard SMTP (Gmail)
+    if not my_email or not app_password:
+        raise ValueError("MY_EMAIL and APP_PASSWORD environment variables are required for SMTP.")
+
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = my_email
@@ -53,13 +110,12 @@ def send_email(subject: str, body_text: str, body_html: str = None, recipients: 
         part2 = MIMEText(body_html, "html")
         msg.attach(part2)
     
-    smtplib_send_email(my_email, app_password, recipients, msg)
+    return smtplib_send_email(my_email, app_password, recipients, msg)
 
 
 def smtplib_send_email(my_email: str, app_password: str, recipients: list, msg: MIMEMultipart):
     import smtplib
     try:
-        # Try STARTTLS on Port 587 (Cloud platform compatible for Render/AWS)
         with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as smtp:
             smtp.ehlo()
             smtp.starttls()
@@ -69,11 +125,17 @@ def smtplib_send_email(my_email: str, app_password: str, recipients: list, msg: 
             return True
     except Exception as err587:
         print(f"⚠️ Port 587 STARTTLS failed ({err587}). Trying SSL port 465 fallback...")
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as smtp:
-            smtp.login(my_email, app_password)
-            smtp.sendmail(my_email, recipients, msg.as_string())
-            print("✅ Email dispatched successfully via SSL (port 465)")
-            return True
+        try:
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as smtp:
+                smtp.login(my_email, app_password)
+                smtp.sendmail(my_email, recipients, msg.as_string())
+                print("✅ Email dispatched successfully via SSL (port 465)")
+                return True
+        except Exception as err465:
+            print(f"❌ SMTP failed: {err465}")
+            print("💡 Tip: Render Free Tier blocks outbound SMTP ports 25, 465, 587.")
+            print("To send emails on Render Free Tier, get a free API key from Resend.com (3,000 free emails/mo) and set RESEND_API_KEY in Render environment variables!")
+            raise err465
 
 
 def _wrap_in_email_template(html_body_content: str) -> str:
