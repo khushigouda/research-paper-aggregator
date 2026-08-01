@@ -1,9 +1,10 @@
 services:
-  - type: cron
-    name: ai-paper-aggregator-weekly-digest
-    env: docker
-    dockerfilePath: ./Dockerfile
-    schedule: "0 9 * * 1" # Runs every Monday at 9:00 AM UTC
+  - type: web
+    name: ai-paper-aggregator
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python server.py"
     envVars:
       - key: DATABASE_URL
         sync: false
