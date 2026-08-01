@@ -58,10 +58,22 @@ def send_email(subject: str, body_text: str, body_html: str = None, recipients: 
 
 def smtplib_send_email(my_email: str, app_password: str, recipients: list, msg: MIMEMultipart):
     import smtplib
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-        smtp.login(my_email, app_password)
-        smtp.sendmail(my_email, recipients, msg.as_string())
-    return True
+    try:
+        # Try STARTTLS on Port 587 (Cloud platform compatible for Render/AWS)
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as smtp:
+            smtp.ehlo()
+            smtp.starttls()
+            smtp.login(my_email, app_password)
+            smtp.sendmail(my_email, recipients, msg.as_string())
+            print("✅ Email dispatched successfully via STARTTLS (port 587)")
+            return True
+    except Exception as err587:
+        print(f"⚠️ Port 587 STARTTLS failed ({err587}). Trying SSL port 465 fallback...")
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as smtp:
+            smtp.login(my_email, app_password)
+            smtp.sendmail(my_email, recipients, msg.as_string())
+            print("✅ Email dispatched successfully via SSL (port 465)")
+            return True
 
 
 def _wrap_in_email_template(html_body_content: str) -> str:
