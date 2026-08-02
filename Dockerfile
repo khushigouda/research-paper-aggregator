@@ -21,5 +21,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project files
 COPY . /app/
 
-# Default execution command runs the weekly digest batch job
-CMD ["python", "run_weekly_digest.py"]
+# Execution command starts the web server (keeps container alive & provides health checks for Render)
+CMD ["python", "server.py"]
+

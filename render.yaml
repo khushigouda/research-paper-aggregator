@@ -14,3 +14,10 @@ services:
         sync: false
       - key: APP_PASSWORD
         sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: FROM_EMAIL
+        sync: false
+
