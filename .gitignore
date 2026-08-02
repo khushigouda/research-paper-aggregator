@@ -1,10 +1,16 @@
 # Environments
 venv/
+.venv/
 .env
 
-# Python caching
+# Python caching & build artifacts
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.pytest_cache/
 
-# IDEs
+# IDEs & System
 .vscode/
+.idea/
+.DS_Store
